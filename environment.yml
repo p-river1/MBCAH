@@ -1,0 +1,17 @@
+name: envmbcah
+dependencies:
+  - python=3.9
+  - pip
+  - numpy
+  - scipy
+  - pandas
+  - scikit-learn
+  - joblib
+  - matplotlib
+  - seaborn
+  - notebook
+  - tqdm
+channels:
+  - defaults
+  - conda-forge
+  - anaconda
