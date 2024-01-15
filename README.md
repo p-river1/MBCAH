@@ -2,9 +2,8 @@ Model-based clustering and alignment of water quality curves with prior knowledg
 
 # Installation
 ```
-mkdir MBCAH
-cd MBCAH
 git clone https://github.com/p-river1/MBCAH.git
+cd MBCAH
 conda update conda
 conda env create -f environment.yml
 conda activate envmbcah
