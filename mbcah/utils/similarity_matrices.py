@@ -83,37 +83,6 @@ def build_C_mask(N, frac):
     return C
 
 
-def build_C_strat(Z, frac, frac_noise=0., path_only=False):
-    """
-    returns a similarity matrix build from the
-    true classes Z, by sampling a fraction frac
-    of the nodes of each class and adding noise
-    to a fraction frac_noise of the nodes
-    """
-    N = Z.shape[0]
-    K = np.unique(Z).size
-    C = np.zeros((N, N), dtype='int')
-    for k in range(K):
-        ind_k = np.where(Z == k)[0]
-        nb_nodes = int(frac * ind_k.shape[0])
-        ind_sampled = np.random.choice(ind_k, nb_nodes, replace=False)
-        if not path_only:
-            C[np.ix_(ind_sampled, ind_sampled)] = 1
-        else:
-            for i_1, i_2 in zip(ind_sampled[:-1], ind_sampled[1:]):
-                C[i_1, i_2] = 1
-                C[i_2, i_1] = 1
-    if frac_noise > 0.:
-        nb_nodes_random = int(frac_noise * N)
-        ind_rnd = np.random.choice(N, nb_nodes_random, replace=False)
-        C[np.ix_(ind_rnd, ind_rnd)] = 1 - C[np.ix_(ind_rnd, ind_rnd)]
-
-    C[np.diag_indices(N)] = 0
-    # noinspection PyUnresolvedReferences
-    assert ((C - C.T) == 0).all()
-    return C
-
-
 def build_C(Z, frac, frac_noise=None):
     """
     returns a similarity matrix build from the

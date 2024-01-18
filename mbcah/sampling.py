@@ -1,6 +1,8 @@
 import numpy as np
 import scipy as sp
 
+from .utils import init
+
 
 class Sampler:
 
@@ -9,9 +11,12 @@ class Sampler:
         N, T, K, S,
         alpha_rho,
         alpha_gamma,
+        constrained_sigma2,
         sigma2_gp_mu,
         sigma2_gp_sigma2,
         s2,
+        n_intervals,
+        p_missing,
         random_state,
         dtype
     ):
@@ -35,9 +40,17 @@ class Sampler:
         self.sigma2_gp_mu = sigma2_gp_mu
         self.sigma2_gp_sigma2 = sigma2_gp_sigma2
         self.s2 = s2
+        self.constrained_sigma2 = constrained_sigma2
+        self.sigma2_zero = 0.
+
+        self.n_intervals = n_intervals
+        self.p_missing = p_missing
 
         self.random_state = random_state
         self.dtype = dtype
+
+        self.min_den = .1
+        self.min_float = 1e-30
 
         self.rho = None
         self.gamma = None
@@ -46,9 +59,12 @@ class Sampler:
 
         self.Z = None
         self.z = None
+        self.tau_inds = None
         self.tau = None
+        self.VS_tau = None
 
         self.X = None
+        self.mask = None
 
     def sample(self):
         self.rho = dirichlet(self.alpha_rho, 1, self.K, self.random_state)[0]
@@ -64,36 +80,54 @@ class Sampler:
             self.mu = self.random_state.multivariate_normal(
                 mean=zero_mean, cov=cov_mu, size=self.K
             ).T.astype(self.dtype)
-            cov_sigma2 = self.s2 * np.exp(- grid_cdist / (2. * self.sigma2_gp_sigma2))
-            self.sigma2 = self.random_state.multivariate_normal(
-                mean=zero_mean, cov=cov_sigma2, size=self.K
-            ).T.astype(self.dtype) ** 2.
+            cov_sigma2 = np.exp(- grid_cdist / (2. * self.sigma2_gp_sigma2))
+
+            self.sigma2 = np.tile(self.s2[np.newaxis, :], (self.T_max, 1))
+            if self.constrained_sigma2 == 'sigma_jk':
+                self.sigma2 = self.sigma2 + self.random_state.multivariate_normal(
+                    mean=zero_mean, cov=cov_sigma2, size=self.K
+                ).T.astype(self.dtype) ** 2.
 
         self.Z = self.random_state.choice(self.K, size=self.N, p=self.rho)
         self.z = np.zeros((self.N, self.K), dtype='bool')
         self.z[np.arange(self.N), self.Z] = True
 
+        self.tau_inds = np.zeros(self.N, dtype='int')
         self.tau = np.zeros(self.N, dtype='int')
         self.X = np.zeros((self.N, self.T), dtype=self.dtype)
 
         sigma = np.sqrt(self.sigma2)
+        for k in range(self.K):
+            Zk = (self.Z == k)
+            self.tau_inds[Zk] = self.random_state.choice(
+                self.M, size=Zk.sum(), p=self.gamma[k]
+            )
+        self.tau = self.S[self.tau_inds]
 
         for k in range(self.K):
             Zk = (self.Z == k)
-            nk = Zk.sum()
-            shiftsk = self.S[self.random_state.choice(
-                self.M, size=nk, p=self.gamma[k]
-            )]
-            self.tau[Zk] = shiftsk
-
             for m, sm in enumerate(self.S):
                 inds_km = Zk & (self.tau == sm)
-                n_km = inds_km.size
+                n_km = inds_km.sum()
                 if n_km > 0:
                     self.X[inds_km] = self.random_state.normal(
                         loc=self.mu[sm: self.T + sm, k],
-                        scale=sigma[sm: self.T + sm, k]
+                        scale=sigma[sm: self.T + sm, k],
+                        size=(n_km, self.T)
                     )
+
+        self.mask = sample_intervals_mask(
+            X=self.X,
+            n_intervals=self.n_intervals,
+            p_missing=self.p_missing,
+            random_state=self.random_state
+        )
+        self.X[self.mask] = np.nan
+
+        VS, XS = init.init_VS_XS(
+            self.X, self.mask, self.S
+        )
+        self.VS_tau = VS[np.arange(self.N), :, self.tau_inds]
 
 
 def dirichlet(alpha, n_samples, dim, random_state):
