@@ -186,7 +186,7 @@ class MBCAH:
         max_iter_em=50,
         min_float=1e-30,
         random_state=None,
-        verbose=1,
+        verbose=0,
         dtype='float64',
         debug=False
     ):
